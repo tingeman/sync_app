@@ -205,30 +205,32 @@ def write_config():
 
 
 def read_config():
-    config = configparser.ConfigParser()
-    config.optionxform=str   # In order to preserve case in config parameter names
+    global config
+    with config_lock:
+        config = configparser.ConfigParser()
+        config.optionxform=str   # In order to preserve case in config parameter names
 
-    found_files = config.read('config.ini')
+        found_files = config.read('config.ini')
 
-    if len(found_files) == 0:
-        config['main'] =      {'sleepduration': '30'}
-        config['WD 1 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
-                               'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_1.ffs_batch',
-                               'every':        '1',
-                               'unit':         'minutes',
-                               'LastRun':      'Never',
-                               'LastDuration': 'None',
-                               'LastResult':   'None',
-                               'LastSuccess':  'Never'}
-        config['WD 2 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
-                               'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_2.ffs_batch',
-                               'every':        '1',
-                               'unit':         'minutes',
-                               'LastRun':      'Never',
-                               'LastDuration': 'None',
-                               'LastResult':   'None',
-                               'LastSuccess':  'Never'}
-        write_config()
+        if len(found_files) == 0:
+            config['main'] =      {'sleepduration': '30'}
+            config['WD 1 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
+                                   'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_1.ffs_batch',
+                                   'every':        '1',
+                                   'unit':         'minutes',
+                                   'LastRun':      'Never',
+                                   'LastDuration': 'None',
+                                   'LastResult':   'None',
+                                   'LastSuccess':  'Never'}
+            config['WD 2 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
+                                   'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_2.ffs_batch',
+                                   'every':        '1',
+                                   'unit':         'minutes',
+                                   'LastRun':      'Never',
+                                   'LastDuration': 'None',
+                                   'LastResult':   'None',
+                                   'LastSuccess':  'Never'}
+    write_config()
     return config
 
 def register_jobs(config):
@@ -267,10 +269,24 @@ def register_jobs(config):
         print('Next run scheduled at {0:%Y-%m-%d %H:%M}'.format(job.next_run))
     
 def clear_all_jobs():
+    global reconfiguring
+    global config
+    global ACTIVE_JOBS
+    global RUNNING_JOBS
+    
     for systray in all_systrays:
         print('{0}: Now quiting...'.format(systray.name))
         schedule.clear(systray.name)
         ACTIVE_JOBS[systray.name] = False
+    
+    ACTIVE_JOBS = {}
+    RUNNING_JOBS = {}
+    
+
+
+config = read_config()
+clear_all_jobs()
+register_jobs(config)    
     
 sleepduration = config.getint('main','sleepduration')
 print('Infinite loop, checking schedule every {0} seconds.'.format(sleepduration))
