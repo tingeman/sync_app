@@ -26,6 +26,9 @@
 #
 # Now run:
 # > pyinstaller sync_app.spec
+#
+#
+# Launch the sync_app.exe file from the /dist/sync_app folder at startup, using Windows scheduler.
 
 
 
