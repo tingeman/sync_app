@@ -4,6 +4,10 @@
 # Need to install infi.systray like this:
 # pip install infi.systray
 
+# and schedule module using either conda or pip:
+# conda install -c conda-forge schedule
+# pip install schedule
+
 # In order to make executable, install pyinstaller like this:
 # > conda install -c conda-forge pyinstaller 
 #
@@ -34,7 +38,7 @@ import datetime as dt
 import configparser
 import json
 import pathlib
-from infi.systray import SysTrayIcon
+
 
 #icons = glob.glob('./*.ico')
 icons = {'error':   './icons/cancel.ico',
@@ -242,6 +246,16 @@ def register_jobs(config):
         if section.lower() == 'main':
             continue
         name = section
+
+        batch_file = config.get(section,'args').split()[0]
+        if not pathlib.Path(batch_file).exists():
+            # could not find batch file, so give an error message
+            systray = MySysTrayIcon(name, icons['error'], '', (), on_quit=on_quit_callback)
+            systray.start()
+            all_systrays.append(systray)   # store in list, to always have access to them all
+            systray_update(systray, icon=icons['error'], status_str='File not found: {0}'.format(batch_file))
+            continue
+
         systray = MySysTrayIcon(name, icons['idle'], '', menu_options,
                                 on_quit=on_quit_callback)
         systray.start()
