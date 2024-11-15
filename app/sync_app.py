@@ -11,13 +11,19 @@
 # In order to make executable, install pyinstaller like this:
 # > conda install -c conda-forge pyinstaller 
 #
+
 # Then run:
+# > pyinstaller --add-data "app/icons/*.ico:./icons/" --add-data "app/*.ini:." --hidden-import "pkg_resources" --noconsole ./app/sync_app.py
+
+# This is equivalent to the following multistep procedure:
+#
+# First run:
 # > pyinstaller sync_app.py
 #
 # Then edit the generated *.spec file to include the following in the 'a' section:
 #
-# datas=[('./icons/*.ico', './icons/'),
-#        ('./*.ini', '.')],
+# datas=[('./app/icons/*.ico', './icons/'),
+#        ('./app/*.ini', '.')],
 # hiddenimports=['pkg_resources'],
 #
 # and the follwing in the 'exe' section:
@@ -29,10 +35,16 @@
 #
 #
 # Launch the sync_app.exe file from the /dist/sync_app folder at startup, using Windows scheduler.
+#
+# If there is a problem launching the app due to missing imports, first check that 
+# the spec file was appropriately modified. Then delete folders [__pycache__, build, dist]
+# and run pyinstaller again.
 
 
 
 from infi.systray import SysTrayIcon
+import os
+import sys
 import time
 import schedule
 import subprocess
@@ -43,14 +55,23 @@ import json
 import pathlib
 
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return pathlib.Path(base_path)/relative_path
+    
+
 #icons = glob.glob('./*.ico')
-icons = {'error':   './icons/cancel.ico',
-         'cancel':  './icons/cancel-1.ico',
-         'success': './icons/checked-1.ico',
-         'warning': './icons/information.ico',
-         'working': './icons/cogwheel.ico',
-         'idle':    './icons/clock.ico',
-         'paused':  './icons/infinity.ico'}
+icons = {'error':   str(resource_path('icons/cancel.ico')),
+         'cancel':  str(resource_path('icons/cancel-1.ico')),
+         'success': str(resource_path('icons/checked-1.ico')),
+         'warning': str(resource_path('icons/information.ico')),
+         'working': str(resource_path('icons/cogwheel.ico')),
+         'idle':    str(resource_path('icons/clock.ico')),
+         'paused':  str(resource_path('icons/infinity.ico'))}
+
+CONFIG_FILE = pathlib.Path('./config.ini')
+TEMPLATE_CONFIG_FILE = resource_path('config.ini')
 
 ACTIVE_JOBS = {}
 RUNNING_JOBS = {}
@@ -122,13 +143,20 @@ def execute_freefilesync(systray, cmd, *args):
         write_config()
         
         systray_update(systray, icon=icons['working'], status_str='Working...')
-        completed = subprocess.run(list((cmd, args)))
+        try:
+            completed = subprocess.run(list((cmd, *args)))
+        except:
+            completed = None
+
         run_duration = dt.datetime.now()-run_started
 
     # Ensure that two calls/threads do not update properties at the same time
     with config_lock:
         config[systray.name]['LastDuration'] = str(run_duration).split('.')[0]
-        if completed.returncode == 0:
+        if completed is None:
+            config[systray.name]['LastResult'] = 'Failed'
+            systray_update(systray, icon=icons['error'], status_str='Job launch failed...')
+        elif completed.returncode == 0:
             config[systray.name]['LastResult'] = 'Success'
             config[systray.name]['LastSuccess'] = config[systray.name]['LastRun']
             systray_update(systray, icon=icons['success'], status_str='Waiting...')
@@ -206,7 +234,7 @@ def systray_update(systray, icon=None, status_str=None):
 def write_config():
     global config
     with config_lock:     # Ensure that two calls/threads do not write at the same time
-        with open('config.ini', 'w') as configfile:
+        with open(CONFIG_FILE, 'w') as configfile:
             config.write(configfile)        
 
 
@@ -217,28 +245,35 @@ def read_config():
         config = configparser.ConfigParser()
         config.optionxform=str   # In order to preserve case in config parameter names
 
-        found_files = config.read('config.ini')
+        found_files = config.read(str(CONFIG_FILE))
 
         if len(found_files) == 0:
-            config['main'] =      {'sleepduration': '30'}
-            config['WD 1 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
-                                   'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_1.ffs_batch',
-                                   'every':        '1',
-                                   'unit':         'minutes',
-                                   'LastRun':      'Never',
-                                   'LastDuration': 'None',
-                                   'LastResult':   'None',
-                                   'LastSuccess':  'Never'}
-            config['WD 2 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
-                                   'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_2.ffs_batch',
-                                   'every':        '1',
-                                   'unit':         'minutes',
-                                   'LastRun':      'Never',
-                                   'LastDuration': 'None',
-                                   'LastResult':   'None',
-                                   'LastSuccess':  'Never'}
+            
+            found_files = config.read(str(TEMPLATE_CONFIG_FILE))
+            
+            if len(found_files) == 0:
+                
+                config['main'] =      {'sleepduration': '30'}
+                config['WD 1 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
+                                       'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_1.ffs_batch',
+                                       'every':        '1',
+                                       'unit':         'minutes',
+                                       'LastRun':      'Never',
+                                       'LastDuration': 'None',
+                                       'LastResult':   'None',
+                                       'LastSuccess':  'Never'}
+                config['WD 2 Sync'] = {'cmd':          'C:/Program Files/FreeFileSync/FreeFileSync.exe',
+                                       'args':         'C:/thin_private/Backup_profiles/SyncSettings_THIN_WD_2.ffs_batch',
+                                       'every':        '1',
+                                       'unit':         'minutes',
+                                       'LastRun':      'Never',
+                                       'LastDuration': 'None',
+                                       'LastResult':   'None',
+                                       'LastSuccess':  'Never'}
+                                       
     write_config()
     return config
+
 
 def register_jobs(config):
     menu_options = (('Run now', None, run_now),

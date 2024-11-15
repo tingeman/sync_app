@@ -1,2 +1,0 @@
-infi.systray
-pyinstaller
